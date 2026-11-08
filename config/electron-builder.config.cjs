@@ -359,7 +359,10 @@ module.exports = {
     'out/main/plugins/plugin-authoring-checks.js',
     // `orca plugin test` and `orca plugin check` load the runtime, kit and hooks in Node.
     'resources/plugins/declarative/*.mjs',
-    'out/main/skills/bundled-skill-install/cli-entry.js',
+    'out/main/skills/bundled-skill-install/**',
+    // The skills CLI entry pulls sibling modules by relative path, so the whole main tree
+    // must stay on disk next to it instead of half of it living inside app.asar.
+    'out/main/**',
     'out/main/startup/http1-compatibility-marker.js',
     'out/main/daemon-entry.js',
     'out/main/session-scanner-service-entry.js',
@@ -531,6 +534,12 @@ module.exports = {
         context.packager
       )
       await packageMacTerminalHost(join(resourcesDir, '..', '..'), context)
+      // Why: local builds skip signing (so afterSign never fires), leaving Orca.app linker-signed as
+      // `Electron`. TCC cannot map that to com.stablyai.orca, so computer-use stays denied even with
+      // Accessibility on. Seal the bundle ad hoc with the real identifier as the last packaging step.
+      if (!isMacRelease) {
+        adhocSealLocalMacApp(join(resourcesDir, '..', '..'))
+      }
     }
   },
   win: {
@@ -882,6 +891,28 @@ async function signMacStandaloneHelper(helperPath, helperName, packager, entitle
   args.push(helperPath)
   execFileSync('codesign', args, { stdio: 'inherit' })
   execFileSync('codesign', ['--verify', '--strict', helperPath], { stdio: 'inherit' })
+}
+
+function adhocSealLocalMacApp(appPath) {
+  if (!existsSync(appPath)) {
+    throw new Error(`Missing macOS app bundle to seal at ${appPath}`)
+  }
+  const macosDir = join(appPath, 'Contents', 'MacOS')
+  const mainExecutable = readFileSync(join(appPath, 'Contents', 'Info.plist'), 'utf8').match(
+    /<key>CFBundleExecutable<\/key>\s*<string>([^<]+)<\/string>/
+  )?.[1]
+  // Linker-only signatures count as unsigned subcomponents, so the outer seal fails without these.
+  for (const filename of readdirSync(macosDir)) {
+    if (filename !== mainExecutable) {
+      execFileSync('codesign', ['--force', '--sign', '-', join(macosDir, filename)], {
+        stdio: 'inherit'
+      })
+    }
+  }
+  execFileSync('codesign', ['--force', '--sign', '-', '--identifier', appId, appPath], {
+    stdio: 'inherit'
+  })
+  execFileSync('codesign', ['--verify', '--strict', appPath], { stdio: 'inherit' })
 }
 
 function codesignArgs(identity, targetPath) {

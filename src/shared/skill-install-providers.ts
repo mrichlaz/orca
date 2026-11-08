@@ -268,6 +268,14 @@ export const SKILL_INSTALL_PROVIDERS = Object.freeze([
     displayName: 'DeepSeek Harness',
     globalSegments: null,
     workspaceSegments: null
+  },
+  // Hermes keeps skills at <HERMES_HOME>/skills (~/.hermes/skills by default).
+  {
+    id: 'hermes',
+    displayName: 'Hermes',
+    globalSegments: ['.hermes', 'skills'],
+    workspaceSegments: null,
+    homeEnv: 'HERMES_HOME'
   }
 ] satisfies SkillInstallProviderEntry[])
 
