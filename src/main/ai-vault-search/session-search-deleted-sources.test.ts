@@ -78,10 +78,14 @@ it('judges each merged-root directory on its own', async () => {
 })
 
 it('retires a synthetic row when the container it came from is gone', async () => {
-  const db = join(harness.root, 'opencode.db')
+  const db = join(harness.root, 'state.db')
   await writeFile(db, '')
   const row = `${db}#session-1`
   const enumeratedContainers = new Map([[db, new Set(['session-1'])]])
+  await expect(retire([row], { roots: [] })).resolves.toMatchObject({
+    retired: [],
+    unverifiable: [row]
+  })
   await expect(retire([row], { roots: [], enumeratedContainers })).resolves.toMatchObject({
     retired: []
   })
